@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Military Symbol Explorer</title>
+  <style>
+    /* Light theme color palette (default).  Dark mode has been removed for
+       simplicity since the majority of users requested a single modern look. */
+    :root {
+      --bg-color: #f7f9fc;
+      --panel-color: #ffffff;
+      --border-color: #d7e1ec;
+      --primary-color: #2f8de3;
+      --primary-hover: #1565c0;
+      --text-color: #00274c;
+      --muted-text: #6c7a8d;
+      --card-hover: rgba(47, 141, 227, 0.1);
+      --selected-border: #2f8de3;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+    }
+    /* Header acts as a sticky container for the search bar, filters and actions.  We
+       separate layout (flex) from positioning (sticky) to avoid duplication. */
+    header {
+      display: flex;
+      flex-direction: column;
+      flex-wrap: wrap;
+      align-items: stretch;
+      justify-content: flex-start;
+      background: var(--panel-color);
+      border-bottom: 1px solid var(--border-color);
+      padding: 0.5rem 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .search-container {
+      display: flex;
+      gap: 0.5rem;
+      flex: 1 1 auto;
+      min-width: 250px;
+    }
+    input[type="text"], select {
+      background: var(--bg-color);
+      border: 1px solid var(--border-color);
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      color: var(--text-color);
+      width: 100%;
+    }
+    select {
+      max-width: 200px;
+    }
+    input[type="text"]::placeholder {
+      color: var(--muted-text);
+    }
+    button.primary {
+      background: var(--primary-color);
+      color: #ffffff;
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    button.primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    button.primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+    .wrapper {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    /*
+     * The header positioning and styling are defined above.  This rule is
+     * intentionally left blank to avoid overriding background colours or other
+     * properties.  Historically there were duplicate header definitions; these
+     * have been consolidated to a single rule at the top of the stylesheet.
+     */
+    header {
+    }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+    }
+    .search-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      /* Limit the search and filter group to a moderate width so it doesn't
+         consume the entire header width on larger screens. */
+      flex: 1 1 250px;
+      max-width: 480px;
+    }
+    .search-group input[type="text"] {
+      flex: 1 1 200px;
+      max-width: 300px;
+    }
+    .actions-group {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-shrink: 0;
+    }
+    .view-selected-label {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.9rem;
+      color: var(--text-color);
+    }
+
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 0.5rem;
+      color: var(--muted-text);
+    }
+    .summary span {
+      font-weight: 500;
+      color: var(--text-color);
+    }
+    .summary button {
+      background: var(--panel-color);
+      color: var(--primary-color);
+      border: 1px solid var(--border-color);
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .summary button:hover {
+      background: var(--card-hover);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      position: relative;
+      background: var(--panel-color);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: background 0.2s, border-color 0.2s;
+      cursor: pointer;
+    }
+    .card:hover {
+      background: var(--card-hover);
+    }
+    .card.selected {
+      border-color: var(--selected-border);
+    }
+    .card svg {
+      width: 60px;
+      height: 60px;
+      margin-bottom: 0.5rem;
+    }
+    .card-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 0.25rem;
+    }
+    .card-category {
+      font-size: 0.75rem;
+      color: var(--muted-text);
+      text-align: center;
+    }
+    .checkbox {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--panel-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .checkbox.checked {
+      border-color: var(--selected-border);
+      background: var(--selected-border);
+    }
+    /* The check mark is drawn using a pseudo‑element on the checkbox.  It is
+       hidden by default and shown only when the `.checked` class is applied. */
+    .checkbox::after {
+      content: '';
+    }
+    .checkbox.checked::after {
+      content: '\2713'; /* Unicode check mark */
+      color: #fff;
+      font-size: 12px;
+    }
+  </style>
+  <!-- Load milsymbol library -->
+  <script src="https://cdn.jsdelivr.net/npm/milsymbol/dist/milsymbol.min.js"></script>
+  <!-- JSZip and FileSaver for downloads -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <!-- Convert symbology UMD module: converts letter‑based SIDCs to
+       number‑based SIDCs.  Exposes ConvertSymbology on the global object. -->
+  <script src="https://unpkg.com/@orbat-mapper/convert-symbology@1.0.2/dist/convert-symbology.umd.cjs"></script>
+</head>
+<body>
+  <header>
+    <div class="top-bar">
+      <div class="search-group">
+        <input type="text" id="search-input" placeholder="Search symbols..." />
+        <select id="category-filter">
+          <option value="All">All</option>
+        </select>
+      </div>
+      <div class="actions-group">
+        <label class="view-selected-label">
+          <input type="checkbox" id="view-selected-checkbox" /> View selected
+        </label>
+        <button class="primary" id="download-btn" disabled>Download Selected (0)</button>
+      </div>
+    </div>
+    <div class="summary">
+      <span id="found-count">0 symbols found</span> • <span id="selected-count">0 selected</span>
+      <button id="select-all-btn">Select All Visible</button>
+      <button id="clear-selection-btn">Clear Selection</button>
+    </div>
+  </header>
+  <div class="wrapper">
+    <div id="grid" class="grid"></div>
+  </div>
+
+  <script>
+    /**
+     * The global symbol dataset. This array will be populated dynamically by
+     * loading all JMSML instance XML files from the joint‑military‑symbology‑xml
+     * repository. Each entry in this array will have the following structure:
+     * { name: string, sidc: string, category: string }
+     *
+     * Initially it is empty; `loadJMSML()` will fill it.
+     */
+    const symbolData = [];
+
+    // State variables
+    let filteredSymbols = [];
+    const selectedSymbols = new Set();
+
+    // DOM elements
+    const searchInput = document.getElementById('search-input');
+    const categoryFilter = document.getElementById('category-filter');
+    const downloadBtn = document.getElementById('download-btn');
+    const grid = document.getElementById('grid');
+    const foundCount = document.getElementById('found-count');
+    const selectedCount = document.getElementById('selected-count');
+    const selectAllBtn = document.getElementById('select-all-btn');
+    const clearSelectionBtn = document.getElementById('clear-selection-btn');
+    // View selected checkbox
+    const viewSelectedCheckbox = document.getElementById('view-selected-checkbox');
+
+    /**
+     * Fetch and parse all relevant instance XML files from the JMSML project.
+     *
+     * The Joint Military Symbology Markup Language defines thousands of
+     * combinations of symbols across land, air, sea, space and cyber domains.
+     * Each symbol set resides in its own XML file under the `instance` folder
+     * of the joint‑military‑symbology‑xml repository.  For each file this
+     * function pulls the raw XML via raw.githubusercontent.com, parses it
+     * client‑side with DOMParser, extracts the `LegacySymbol` entries and
+     * constructs a human‑readable name by looking up the corresponding
+     * entity, entity type, subtype and modifiers.  The final result is
+     * appended to the global `symbolData` array.
+     */
+    async function loadJMSML() {
+      // List of instance XML files to fetch.  This list reflects the files in
+      // the `instance` directory of the Esri/joint‑military‑symbology‑xml
+      // repository.  Should the repository add or remove files, update this
+      // list accordingly.
+      const instanceFiles = [
+        'Activity.xml',
+        'Air.xml',
+        'Air_Missile.xml',
+        'Atmospheric.xml',
+        'Base.xml',
+        'Control_Measure.xml',
+        'Cyberspace.xml',
+        'Internal.xml',
+        'Land_Civilian.xml',
+        'Land_Equipment.xml',
+        'Land_Installation.xml',
+        'Land_Unit.xml',
+        'Meteorological_Space.xml',
+        'Mine_Warfare.xml',
+        'Oceanographic.xml',
+        'SIGINT_Air.xml',
+        'SIGINT_Land.xml',
+        'SIGINT_Space.xml',
+        'SIGINT_Subsurface.xml',
+        'SIGINT_Surface.xml',
+        'Sea_Subsurface.xml',
+        'Sea_Surface.xml',
+        'Space.xml',
+        'Space_Missile.xml',
+        'Unknown.xml'
+      ];
+      const baseUrl = 'https://raw.githubusercontent.com/Esri/joint-military-symbology-xml/dev/instance/';
+      // Show a loading indicator in the found count while processing
+      foundCount.textContent = 'Loading symbols…';
+      // Iterate through each file sequentially.  Sequential processing avoids
+      // overloading the network with many concurrent requests and allows
+      // incremental updates to the UI if desired.
+      for (const file of instanceFiles) {
+        try {
+          const response = await fetch(baseUrl + file);
+          if (!response.ok) {
+            console.error('Failed to fetch', file, response.status);
+            continue;
+          }
+          const xmlText = await response.text();
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
+          // Determine the symbol set name (category).  Use the root element's
+          // Label attribute if present; fall back to file name minus extension.
+          const root = xmlDoc.documentElement;
+          let category = root.getAttribute('Label');
+          if (!category) {
+            category = file.replace(/\.xml$/i, '').replace(/_/g, ' ');
+          }
+          // Build a lookup table of IDs to labels for Entities, EntityTypes,
+          // EntitySubTypes and Modifiers.  Many nodes in the XML share the
+          // attributes `ID` and `Label`.  We collect all of them so that
+          // LegacySymbol attribute references can be resolved quickly.
+          const idLabelMap = {};
+          xmlDoc.querySelectorAll('[ID][Label]').forEach(node => {
+            const id = node.getAttribute('ID');
+            const label = node.getAttribute('Label');
+            if (id && label) {
+              idLabelMap[id] = label;
+            }
+          });
+          // Extract all LegacySymbol elements
+          xmlDoc.querySelectorAll('LegacySymbol').forEach(ls => {
+            const sidc = ls.getAttribute('Label');
+            if (!sidc) return;
+            const nameParts = [];
+            // Resolve entity, type, subtype and modifiers via ID maps
+            const entId = ls.getAttribute('EntityID');
+            if (entId && idLabelMap[entId]) nameParts.push(idLabelMap[entId]);
+            const typeId = ls.getAttribute('EntityTypeID');
+            if (typeId && idLabelMap[typeId]) nameParts.push(idLabelMap[typeId]);
+            const subTypeId = ls.getAttribute('EntitySubTypeID');
+            if (subTypeId && idLabelMap[subTypeId]) nameParts.push(idLabelMap[subTypeId]);
+            const mod1 = ls.getAttribute('ModifierOneID');
+            if (mod1 && idLabelMap[mod1]) nameParts.push(idLabelMap[mod1]);
+            const mod2 = ls.getAttribute('ModifierTwoID');
+            if (mod2 && idLabelMap[mod2]) nameParts.push(idLabelMap[mod2]);
+            // Fallback: use LegacySymbol ID as last resort if no name parts
+            let name = nameParts.join(' – ');
+            if (!name) {
+              const legacyId = ls.getAttribute('ID');
+              name = legacyId ? legacyId.replace(/_/g, ' ') : sidc;
+            }
+            symbolData.push({ name, sidc, category });
+          });
+        } catch (err) {
+          console.error('Error processing', file, err);
+        }
+      }
+      // After loading all files, sort the dataset alphabetically by name for
+      // easier browsing.  Then populate categories and perform initial filter.
+      symbolData.sort((a, b) => a.name.localeCompare(b.name));
+      populateCategories();
+      filterData();
+    }
+
+    /**
+     * Populate category filter options based on the dataset.
+     */
+    function populateCategories() {
+      // Reset existing options and add the default
+      categoryFilter.innerHTML = '';
+      const allOpt = document.createElement('option');
+      allOpt.value = 'All';
+      allOpt.textContent = 'All';
+      categoryFilter.appendChild(allOpt);
+      // Extract unique categories from the dataset
+      const categories = Array.from(new Set(symbolData.map(item => item.category)));
+      categories.sort((a, b) => a.localeCompare(b));
+      categories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat;
+        option.textContent = cat;
+        categoryFilter.appendChild(option);
+      });
+    }
+
+    /**
+     * Filter the dataset based on search input and selected category.
+     */
+    function filterData() {
+      const query = searchInput.value.trim().toLowerCase();
+      const category = categoryFilter.value;
+      const viewSelectedOnly = viewSelectedCheckbox && viewSelectedCheckbox.checked;
+      filteredSymbols = symbolData.filter(item => {
+        const matchName = item.name.toLowerCase().includes(query);
+        const matchCategoryText = item.category.toLowerCase().includes(query);
+        const searchMatch = matchName || matchCategoryText;
+        const categoryMatch = category === 'All' || item.category === category;
+        const selectionMatch = !viewSelectedOnly || selectedSymbols.has(item.sidc);
+        return searchMatch && categoryMatch && selectionMatch;
+      });
+      renderGrid();
+      updateSummary();
+    }
+
+    /**
+     * Render the grid of symbol cards.
+     */
+    function renderGrid() {
+      grid.innerHTML = '';
+      filteredSymbols.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.dataset.sidc = item.sidc;
+        // Generate small SVG for the card.  We attempt to render using a
+        // numeric SIDC if possible, and fall back to the original letter
+        // SIDC if numeric fails.  Milsymbol sometimes renders unhandled
+        // symbols as a question mark.  When that happens, we try the
+        // alternative SIDC; if both attempts fail, we display a placeholder.
+        const originalSidc = item.sidc;
+        // Try to convert the letter SIDC to a numeric SIDC if available
+        let numericSidc = originalSidc;
+        if (typeof ConvertSymbology !== 'undefined' && (originalSidc.includes('*') || originalSidc.includes('-'))) {
+          try {
+            const conv = ConvertSymbology.convertLetterSidc2NumberSidc(originalSidc);
+            if (conv && conv.success && conv.sidc) numericSidc = conv.sidc;
+          } catch (err) {
+            // ignore conversion errors
+          }
+        }
+        /**
+         * Attempt to render a SIDC.  Returns the SVG string if valid, or
+         * null if milsymbol indicates the icon is unknown (by including
+         * '?' or '¿') or if an exception occurs.
+         */
+        function tryRender(sidcCandidate) {
+          try {
+            const sym = new ms.Symbol(sidcCandidate, { size: 60 });
+            const svgStr = sym.asSVG();
+            if (svgStr.includes('?') || svgStr.includes('¿')) return null;
+            return svgStr;
+          } catch (e) {
+            return null;
+          }
+        }
+        // Build a list of SIDC variants to try.  Start with numeric and
+        // original; if numeric conversion changed the code, also attempt
+        // converting back to letter form to catch cases where milsymbol
+        // prefers the alphabetic SIDC.
+        const sidcCandidates = [];
+        if (numericSidc) sidcCandidates.push(numericSidc);
+        if (originalSidc !== numericSidc) sidcCandidates.push(originalSidc);
+        // If numeric conversion produced a different SIDC, attempt to
+        // convert it back to letter format
+        if (typeof ConvertSymbology !== 'undefined' && numericSidc && numericSidc !== originalSidc) {
+          try {
+            const back = ConvertSymbology.convertNumberSidc2LetterSidc(numericSidc);
+            if (back && back.success && back.sidc && !sidcCandidates.includes(back.sidc)) {
+              sidcCandidates.push(back.sidc);
+            }
+          } catch (err) {
+            // ignore
+          }
+        }
+        let svgString = null;
+        for (const candidate of sidcCandidates) {
+          svgString = tryRender(candidate);
+          if (svgString) break;
+        }
+        if (svgString) {
+          const temp = document.createElement('div');
+          temp.innerHTML = svgString;
+          const svgElement = temp.firstChild;
+          card.appendChild(svgElement);
+        } else {
+          // In case of invalid SIDC codes or unhandled symbols, show a placeholder
+          const placeholder = document.createElement('div');
+          placeholder.style.width = '60px';
+          placeholder.style.height = '60px';
+          placeholder.style.background = 'var(--border-color)';
+          placeholder.style.borderRadius = '4px';
+          card.appendChild(placeholder);
+        }
+        // Title and category
+        const title = document.createElement('div');
+        title.className = 'card-title';
+        title.textContent = item.name;
+        const categoryElem = document.createElement('div');
+        categoryElem.className = 'card-category';
+        categoryElem.textContent = item.category;
+        card.appendChild(title);
+        card.appendChild(categoryElem);
+        // Checkbox overlay.  The check mark itself is drawn via CSS (see
+        // `.checkbox::after` and `.checkbox.checked::after` in the stylesheet),
+        // so no inner content is required here.
+        const checkbox = document.createElement('div');
+        checkbox.className = 'checkbox';
+        card.appendChild(checkbox);
+        // Initial selection state
+        if (selectedSymbols.has(item.sidc)) {
+          card.classList.add('selected');
+          checkbox.classList.add('checked');
+        }
+        // Click event to toggle selection
+        card.addEventListener('click', event => {
+          // Prevent event when clicking inside card; we use dataset.sidc
+          toggleSelection(item);
+        });
+        grid.appendChild(card);
+      });
+    }
+
+    /**
+     * Toggle the selection of a symbol. If selected, remove it; otherwise add it.
+     */
+    function toggleSelection(item) {
+      if (selectedSymbols.has(item.sidc)) {
+        selectedSymbols.delete(item.sidc);
+      } else {
+        selectedSymbols.add(item.sidc);
+      }
+      updateSelectionStates();
+    }
+
+    /**
+     * Update UI elements to reflect current selection state.
+     */
+    function updateSelectionStates() {
+      // Update card visuals
+      document.querySelectorAll('.card').forEach(card => {
+        const sidc = card.dataset.sidc;
+        const checkbox = card.querySelector('.checkbox');
+        if (selectedSymbols.has(sidc)) {
+          card.classList.add('selected');
+          checkbox.classList.add('checked');
+        } else {
+          card.classList.remove('selected');
+          checkbox.classList.remove('checked');
+        }
+      });
+      // Update counts and download button
+      updateSummary();
+      // If only viewing selected symbols, reapply filter so removed items disappear
+      if (viewSelectedCheckbox && viewSelectedCheckbox.checked) {
+        filterData();
+      }
+    }
+
+
+    /**
+     * Update found and selected counts and adjust download button.
+     */
+    function updateSummary() {
+      foundCount.textContent = `${filteredSymbols.length} symbol${filteredSymbols.length !== 1 ? 's' : ''} found`;
+      selectedCount.textContent = `${selectedSymbols.size} selected`;
+      downloadBtn.textContent = `Download Selected (${selectedSymbols.size})`;
+      downloadBtn.disabled = selectedSymbols.size === 0;
+    }
+
+    // Theme toggling removed.  A single light theme is used throughout.
+
+    /**
+     * Select all currently visible symbols in the grid.
+     */
+    function selectAllVisible() {
+      filteredSymbols.forEach(item => {
+        selectedSymbols.add(item.sidc);
+      });
+      updateSelectionStates();
+    }
+
+    /**
+     * Clear all selections.
+     */
+    function clearSelection() {
+      selectedSymbols.clear();
+      updateSelectionStates();
+    }
+
+    /**
+     * Download selected symbols as a ZIP archive.
+     */
+    function downloadSelected() {
+      if (selectedSymbols.size === 0) return;
+      const zip = new JSZip();
+      selectedSymbols.forEach(originalSidc => {
+        const item = symbolData.find(d => d.sidc === originalSidc);
+        if (!item) return;
+        // Attempt to create valid SVG for the SIDC.  We try several
+        // conversions: numeric, original letter and numeric converted
+        // back to letter.  The first successful rendering will be used.
+        let numericSidc = originalSidc;
+        if (typeof ConvertSymbology !== 'undefined' && (originalSidc.includes('*') || originalSidc.includes('-'))) {
+          try {
+            const conv = ConvertSymbology.convertLetterSidc2NumberSidc(originalSidc);
+            if (conv && conv.success && conv.sidc) numericSidc = conv.sidc;
+          } catch (err) {
+            // ignore
+          }
+        }
+        function tryRenderToSVG(sidcCandidate) {
+          try {
+            const symbol = new ms.Symbol(sidcCandidate);
+            const svg = symbol.asSVG();
+            if (svg.includes('?') || svg.includes('¿')) return null;
+            return svg;
+          } catch (e) {
+            return null;
+          }
+        }
+        // Build candidate list
+        const candidates = [];
+        if (numericSidc) candidates.push(numericSidc);
+        if (originalSidc !== numericSidc) candidates.push(originalSidc);
+        if (typeof ConvertSymbology !== 'undefined' && numericSidc && numericSidc !== originalSidc) {
+          try {
+            const back = ConvertSymbology.convertNumberSidc2LetterSidc(numericSidc);
+            if (back && back.success && back.sidc && !candidates.includes(back.sidc)) candidates.push(back.sidc);
+          } catch (err) {
+            // ignore
+          }
+        }
+        let svgString = null;
+        let sidcUsed = null;
+        for (const cand of candidates) {
+          svgString = tryRenderToSVG(cand);
+          sidcUsed = cand;
+          if (svgString) break;
+        }
+        if (!svgString) return; // skip
+        const nameForFile = sidcUsed.replace(/\W+/g, '_');
+        zip.file(`${nameForFile}.svg`, svgString);
+      });
+      zip.generateAsync({ type: 'blob' }).then(blob => {
+        saveAs(blob, 'selected_symbols.zip');
+      });
+    }
+
+    // Event listeners
+    searchInput.addEventListener('input', filterData);
+    categoryFilter.addEventListener('change', filterData);
+    selectAllBtn.addEventListener('click', selectAllVisible);
+    clearSelectionBtn.addEventListener('click', clearSelection);
+    downloadBtn.addEventListener('click', downloadSelected);
+
+    // When toggling the "View selected" checkbox, reapply filters
+    if (viewSelectedCheckbox) {
+      viewSelectedCheckbox.addEventListener('change', filterData);
+    }
+
+    // Theme toggling removed; no initialization required.
+
+    // Initial setup: load the JMSML dataset.  Once loaded it will call
+    // populateCategories() and filterData() internally.  If the fetch
+    // fails for some reason, the UI will remain empty.
+    loadJMSML();
+  </script>
+</body>
+</html>
