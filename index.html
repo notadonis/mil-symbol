@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -216,6 +217,48 @@
       color: #fff;
       font-size: 12px;
     }
+
+    /* Category section styling.  Each category is wrapped in a <details>
+       element with a <summary> header that acts as a toggle for showing
+       or hiding the contained grid of symbols. */
+    details.category-section {
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--panel-color);
+    }
+    details.category-section summary {
+      cursor: pointer;
+      list-style: none;
+      font-weight: 600;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+    }
+    details.category-section summary::-webkit-details-marker {
+      display: none;
+    }
+    details.category-section[open] summary {
+      border-bottom: 1px solid var(--border-color);
+    }
+    /* Arrow indicator for collapse/expand.  Rotates when the section is open. */
+    details.category-section summary::after {
+      content: '\25BC'; /* downward triangle */
+      font-size: 0.7rem;
+      transform: rotate(0deg);
+      transition: transform 0.2s ease-in-out;
+    }
+    details.category-section[open] summary::after {
+      transform: rotate(-180deg);
+    }
+    .category-grid {
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
   </style>
   <!-- Load milsymbol library -->
   <script src="https://cdn.jsdelivr.net/npm/milsymbol/dist/milsymbol.min.js"></script>
@@ -249,7 +292,9 @@
     </div>
   </header>
   <div class="wrapper">
-    <div id="grid" class="grid"></div>
+    <!-- Container for all symbol sections.  Each category will render its own
+         collapsible section with a grid of symbols inside. -->
+    <div id="sections"></div>
   </div>
 
   <script>
@@ -271,7 +316,8 @@
     const searchInput = document.getElementById('search-input');
     const categoryFilter = document.getElementById('category-filter');
     const downloadBtn = document.getElementById('download-btn');
-    const grid = document.getElementById('grid');
+    // Container for category sections.  Each section will host its own grid
+    const sections = document.getElementById('sections');
     const foundCount = document.getElementById('found-count');
     const selectedCount = document.getElementById('selected-count');
     const selectAllBtn = document.getElementById('select-all-btn');
@@ -387,9 +433,23 @@
           console.error('Error processing', file, err);
         }
       }
-      // After loading all files, sort the dataset alphabetically by name for
-      // easier browsing.  Then populate categories and perform initial filter.
+      // After loading all files, remove duplicates based on SIDC.  Multiple
+      // LegacySymbol entries can refer to the same code (often under
+      // different categories or with synonymous names).  Deduplicating here
+      // prevents selection from affecting adjacent cards and reduces clutter.
+      const seen = new Set();
+      const deduped = [];
+      for (const item of symbolData) {
+        if (!seen.has(item.sidc)) {
+          seen.add(item.sidc);
+          deduped.push(item);
+        }
+      }
+      symbolData.length = 0;
+      symbolData.push(...deduped);
+      // Sort the dataset alphabetically by name for easier browsing.
       symbolData.sort((a, b) => a.name.localeCompare(b.name));
+      // Populate category filter and perform initial filter.
       populateCategories();
       filterData();
     }
@@ -438,106 +498,129 @@
      * Render the grid of symbol cards.
      */
     function renderGrid() {
-      grid.innerHTML = '';
+      // Clear existing sections
+      sections.innerHTML = '';
+      // Group filtered symbols by category
+      const groups = {};
       filteredSymbols.forEach(item => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.dataset.sidc = item.sidc;
-        // Generate small SVG for the card.  We attempt to render using a
-        // numeric SIDC if possible, and fall back to the original letter
-        // SIDC if numeric fails.  Milsymbol sometimes renders unhandled
-        // symbols as a question mark.  When that happens, we try the
-        // alternative SIDC; if both attempts fail, we display a placeholder.
-        const originalSidc = item.sidc;
-        // Try to convert the letter SIDC to a numeric SIDC if available
-        let numericSidc = originalSidc;
-        if (typeof ConvertSymbology !== 'undefined' && (originalSidc.includes('*') || originalSidc.includes('-'))) {
-          try {
-            const conv = ConvertSymbology.convertLetterSidc2NumberSidc(originalSidc);
-            if (conv && conv.success && conv.sidc) numericSidc = conv.sidc;
-          } catch (err) {
-            // ignore conversion errors
-          }
+        if (!groups[item.category]) {
+          groups[item.category] = [];
         }
-        /**
-         * Attempt to render a SIDC.  Returns the SVG string if valid, or
-         * null if milsymbol indicates the icon is unknown (by including
-         * '?' or '¿') or if an exception occurs.
-         */
-        function tryRender(sidcCandidate) {
-          try {
-            const sym = new ms.Symbol(sidcCandidate, { size: 60 });
-            const svgStr = sym.asSVG();
-            if (svgStr.includes('?') || svgStr.includes('¿')) return null;
-            return svgStr;
-          } catch (e) {
-            return null;
-          }
-        }
-        // Build a list of SIDC variants to try.  Start with numeric and
-        // original; if numeric conversion changed the code, also attempt
-        // converting back to letter form to catch cases where milsymbol
-        // prefers the alphabetic SIDC.
-        const sidcCandidates = [];
-        if (numericSidc) sidcCandidates.push(numericSidc);
-        if (originalSidc !== numericSidc) sidcCandidates.push(originalSidc);
-        // If numeric conversion produced a different SIDC, attempt to
-        // convert it back to letter format
-        if (typeof ConvertSymbology !== 'undefined' && numericSidc && numericSidc !== originalSidc) {
-          try {
-            const back = ConvertSymbology.convertNumberSidc2LetterSidc(numericSidc);
-            if (back && back.success && back.sidc && !sidcCandidates.includes(back.sidc)) {
-              sidcCandidates.push(back.sidc);
+        groups[item.category].push(item);
+      });
+      // Sort categories alphabetically for consistent ordering
+      const categoriesList = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+      categoriesList.forEach(categoryName => {
+        const items = groups[categoryName];
+        // Create collapsible section for this category
+        const detailsEl = document.createElement('details');
+        detailsEl.className = 'category-section';
+        detailsEl.open = true; // default to expanded
+        const summaryEl = document.createElement('summary');
+        summaryEl.textContent = categoryName;
+        detailsEl.appendChild(summaryEl);
+        // Container for cards within this category
+        const catGrid = document.createElement('div');
+        catGrid.className = 'category-grid';
+        items.forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.dataset.sidc = item.sidc;
+          // Generate small SVG for the card.  We attempt to render using a
+          // numeric SIDC if possible, and fall back to the original letter
+          // SIDC if numeric fails.  Milsymbol sometimes renders unhandled
+          // symbols as a question mark.  When that happens, we try the
+          // alternative SIDC; if both attempts fail, we display a placeholder.
+          const originalSidc = item.sidc;
+          // Try to convert the letter SIDC to a numeric SIDC if available
+          let numericSidc = originalSidc;
+          if (typeof ConvertSymbology !== 'undefined' && (originalSidc.includes('*') || originalSidc.includes('-'))) {
+            try {
+              const conv = ConvertSymbology.convertLetterSidc2NumberSidc(originalSidc);
+              if (conv && conv.success && conv.sidc) numericSidc = conv.sidc;
+            } catch (err) {
+              // ignore conversion errors
             }
-          } catch (err) {
-            // ignore
           }
-        }
-        let svgString = null;
-        for (const candidate of sidcCandidates) {
-          svgString = tryRender(candidate);
-          if (svgString) break;
-        }
-        if (svgString) {
-          const temp = document.createElement('div');
-          temp.innerHTML = svgString;
-          const svgElement = temp.firstChild;
-          card.appendChild(svgElement);
-        } else {
-          // In case of invalid SIDC codes or unhandled symbols, show a placeholder
-          const placeholder = document.createElement('div');
-          placeholder.style.width = '60px';
-          placeholder.style.height = '60px';
-          placeholder.style.background = 'var(--border-color)';
-          placeholder.style.borderRadius = '4px';
-          card.appendChild(placeholder);
-        }
-        // Title and category
-        const title = document.createElement('div');
-        title.className = 'card-title';
-        title.textContent = item.name;
-        const categoryElem = document.createElement('div');
-        categoryElem.className = 'card-category';
-        categoryElem.textContent = item.category;
-        card.appendChild(title);
-        card.appendChild(categoryElem);
-        // Checkbox overlay.  The check mark itself is drawn via CSS (see
-        // `.checkbox::after` and `.checkbox.checked::after` in the stylesheet),
-        // so no inner content is required here.
-        const checkbox = document.createElement('div');
-        checkbox.className = 'checkbox';
-        card.appendChild(checkbox);
-        // Initial selection state
-        if (selectedSymbols.has(item.sidc)) {
-          card.classList.add('selected');
-          checkbox.classList.add('checked');
-        }
-        // Click event to toggle selection
-        card.addEventListener('click', event => {
-          // Prevent event when clicking inside card; we use dataset.sidc
-          toggleSelection(item);
+          /**
+           * Attempt to render a SIDC.  Returns the SVG string if valid, or
+           * null if milsymbol indicates the icon is unknown (by including
+           * '?' or '¿') or if an exception occurs.
+           */
+          function tryRender(sidcCandidate) {
+            try {
+              const sym = new ms.Symbol(sidcCandidate, { size: 60 });
+              const svgStr = sym.asSVG();
+              if (svgStr.includes('?') || svgStr.includes('¿')) return null;
+              return svgStr;
+            } catch (e) {
+              return null;
+            }
+          }
+          // Build a list of SIDC variants to try.  Start with numeric and
+          // original; if numeric conversion changed the code, also attempt
+          // converting back to letter form to catch cases where milsymbol
+          // prefers the alphabetic SIDC.
+          const sidcCandidates = [];
+          if (numericSidc) sidcCandidates.push(numericSidc);
+          if (originalSidc !== numericSidc) sidcCandidates.push(originalSidc);
+          // If numeric conversion produced a different SIDC, attempt to
+          // convert it back to letter format
+          if (typeof ConvertSymbology !== 'undefined' && numericSidc && numericSidc !== originalSidc) {
+            try {
+              const back = ConvertSymbology.convertNumberSidc2LetterSidc(numericSidc);
+              if (back && back.success && back.sidc && !sidcCandidates.includes(back.sidc)) {
+                sidcCandidates.push(back.sidc);
+              }
+            } catch (err) {
+              // ignore
+            }
+          }
+          let svgString = null;
+          for (const candidate of sidcCandidates) {
+            svgString = tryRender(candidate);
+            if (svgString) break;
+          }
+          if (svgString) {
+            const temp = document.createElement('div');
+            temp.innerHTML = svgString;
+            const svgElement = temp.firstChild;
+            card.appendChild(svgElement);
+          } else {
+            // In case of invalid SIDC codes or unhandled symbols, show a placeholder
+            const placeholder = document.createElement('div');
+            placeholder.style.width = '60px';
+            placeholder.style.height = '60px';
+            placeholder.style.background = 'var(--border-color)';
+            placeholder.style.borderRadius = '4px';
+            card.appendChild(placeholder);
+          }
+          // Title and category
+          const title = document.createElement('div');
+          title.className = 'card-title';
+          title.textContent = item.name;
+          const categoryElem = document.createElement('div');
+          categoryElem.className = 'card-category';
+          categoryElem.textContent = item.category;
+          card.appendChild(title);
+          card.appendChild(categoryElem);
+          // Checkbox overlay
+          const checkbox = document.createElement('div');
+          checkbox.className = 'checkbox';
+          card.appendChild(checkbox);
+          // Initial selection state
+          if (selectedSymbols.has(item.sidc)) {
+            card.classList.add('selected');
+            checkbox.classList.add('checked');
+          }
+          // Click event to toggle selection
+          card.addEventListener('click', event => {
+            toggleSelection(item);
+          });
+          catGrid.appendChild(card);
         });
-        grid.appendChild(card);
+        detailsEl.appendChild(catGrid);
+        sections.appendChild(detailsEl);
       });
     }
 
